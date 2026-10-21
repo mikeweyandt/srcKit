@@ -1,0 +1,5 @@
+# Build context allowlist: only what the Dockerfile COPYs.
+*
+!scripts/
+!patches/
+!tests/

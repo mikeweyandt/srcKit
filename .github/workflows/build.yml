@@ -1,0 +1,213 @@
+name: Build
+
+# Pushes and PRs build both architectures and run the smoke tests; nothing is
+# published. Publishing to Docker Hub happens only from a manual run
+# (Actions > Build > Run workflow), which can also override the upstream refs.
+#
+# Docker Hub setup (repo Settings > Secrets and variables > Actions):
+#   variable DOCKERHUB_USERNAME   image is published as <username>/srckit
+#   secret   DOCKERHUB_TOKEN      access token with read/write scope
+
+on:
+  push:
+    branches: [mainline, develop]
+    paths-ignore: ["**.md"]
+  pull_request:
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+    inputs:
+      srcml_ref:
+        description: srcML branch, tag or commit (blank = Dockerfile pin)
+        default: ""
+      srcslice_ref:
+        description: srcSlice branch, tag or commit (blank = Dockerfile pin)
+        default: ""
+      srcdiff_ref:
+        description: srcDiff branch, tag or commit (blank = Dockerfile pin)
+        default: ""
+      publish:
+        description: Push the image to Docker Hub
+        type: boolean
+        default: true
+      tag:
+        description: Image tag (a sha-<commit> tag is always added)
+        default: latest
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+env:
+  IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/srckit
+  PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+
+jobs:
+  refs:
+    name: Resolve refs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      build-args: ${{ steps.resolve.outputs.build-args }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check Docker Hub settings
+        if: env.PUBLISH == 'true'
+        env:
+          USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          HAS_TOKEN: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+        run: |
+          if [[ -z $USERNAME || $HAS_TOKEN != true ]]; then
+            echo "::error::Set the DOCKERHUB_USERNAME variable and DOCKERHUB_TOKEN secret to publish"
+            exit 1
+          fi
+
+      # Branch names become commit SHAs here, once, so both architectures and
+      # both the test and push builds get the same commits. Tags and SHAs pass
+      # through. Blank inputs are left out entirely: an empty build-arg would
+      # override the Dockerfile pin with the upstream default branch.
+      - name: Resolve branch names to commits
+        id: resolve
+        env:
+          SRCML: ${{ inputs.srcml_ref }}
+          SRCSLICE: ${{ inputs.srcslice_ref }}
+          SRCDIFF: ${{ inputs.srcdiff_ref }}
+        run: |
+          resolve() {
+            local tool=$1 ref=$2 repo out
+            [[ -n $ref ]] || return 0
+            repo=$(sed -n "s/^ARG ${tool}_REPO=//p" Dockerfile)
+            if out=$(git ls-remote --exit-code "$repo" "refs/heads/$ref"); then
+              ref=${out%%$'\t'*}
+            fi
+            echo "${tool}_REF=$ref"
+          }
+          args=$(resolve SRCML "$SRCML"; resolve SRCSLICE "$SRCSLICE"; resolve SRCDIFF "$SRCDIFF")
+          echo "${args:-(no overrides; using Dockerfile pins)}"
+          {
+            echo "build-args<<EOF"
+            echo "$args"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build and test (${{ matrix.arch }})
+    needs: refs
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, platform: linux/amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, platform: linux/arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      # The `test` target builds the runtime image and runs tests/run.sh in
+      # it; a failing check fails the build. It exports the versions file.
+      - name: Build and run smoke tests
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: test
+          platforms: ${{ matrix.platform }}
+          build-args: ${{ needs.refs.outputs.build-args }}
+          outputs: type=local,dest=${{ runner.temp }}/test-out
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.arch }},mode=max,ignore-error=true
+
+      - name: Record versions
+        run: |
+          {
+            echo "### ${{ matrix.platform }}"
+            echo '```'
+            cat "$RUNNER_TEMP/test-out/versions"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Log in to Docker Hub
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Same inputs as the tested build, so every layer comes from cache.
+      - name: Push image by digest
+        if: env.PUBLISH == 'true'
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runtime
+          platforms: ${{ matrix.platform }}
+          build-args: ${{ needs.refs.outputs.build-args }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          tags: ${{ env.IMAGE }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.arch }}
+
+      - name: Export digest
+        if: env.PUBLISH == 'true'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        if: env.PUBLISH == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish multi-arch image
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=sha
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          mapfile -t tags < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          sources=()
+          for digest in *; do
+            sources+=("$IMAGE@sha256:$digest")
+          done
+          docker buildx imagetools create "${tags[@]/#/--tag=}" "${sources[@]}"
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect "$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")"

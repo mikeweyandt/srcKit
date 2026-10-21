@@ -1,0 +1,150 @@
+{
+  "a-3-13-55a5e21a09759d0bd51d8553013046ad693ef550": {
+    "aliases": [],
+    "calls": [],
+    "class": "",
+    "decl": "v1/example.cpp:3:13",
+    "definition": [
+      "v1/example.cpp:3:13"
+    ],
+    "dependence": [
+      {
+        "total": "v1/example.cpp:4:17"
+      }
+    ],
+    "file": "v1/example.cpp",
+    "function": "sum",
+    "language": "C++",
+    "name": "a",
+    "namespace": [],
+    "type": "int",
+    "use": [
+      "v1/example.cpp:4:17"
+    ]
+  },
+  "b-3-20-55a5e21a09759d0bd51d8553013046ad693ef550": {
+    "aliases": [],
+    "calls": [],
+    "class": "",
+    "decl": "v1/example.cpp:3:20",
+    "definition": [
+      "v1/example.cpp:3:20"
+    ],
+    "dependence": [
+      {
+        "total": "v1/example.cpp:4:21"
+      }
+    ],
+    "file": "v1/example.cpp",
+    "function": "sum",
+    "language": "C++",
+    "name": "b",
+    "namespace": [],
+    "type": "int",
+    "use": [
+      "v1/example.cpp:4:21"
+    ]
+  },
+  "result-11-9-55a5e21a09759d0bd51d8553013046ad693ef550": {
+    "aliases": [],
+    "calls": [],
+    "class": "",
+    "decl": "v1/example.cpp:11:9",
+    "definition": [
+      "v1/example.cpp:11:9"
+    ],
+    "dependence": [],
+    "file": "v1/example.cpp",
+    "function": "main",
+    "language": "C++",
+    "name": "result",
+    "namespace": [],
+    "type": "int",
+    "use": [
+      "v1/example.cpp:12:18"
+    ]
+  },
+  "total-4-9-55a5e21a09759d0bd51d8553013046ad693ef550": {
+    "aliases": [],
+    "calls": [],
+    "class": "",
+    "decl": "v1/example.cpp:4:9",
+    "definition": [
+      "v1/example.cpp:4:9"
+    ],
+    "dependence": [],
+    "file": "v1/example.cpp",
+    "function": "sum",
+    "language": "C++",
+    "name": "total",
+    "namespace": [],
+    "type": "int",
+    "use": [
+      "v1/example.cpp:5:12"
+    ]
+  },
+  "x-9-9-55a5e21a09759d0bd51d8553013046ad693ef550": {
+    "aliases": [],
+    "calls": [
+      {
+        "definitionPosition": "v1/example.cpp:3:1",
+        "functionName": "sum",
+        "invoke": "v1/example.cpp:11:18",
+        "parameter": "1"
+      }
+    ],
+    "class": "",
+    "decl": "v1/example.cpp:9:9",
+    "definition": [
+      "v1/example.cpp:9:9"
+    ],
+    "dependence": [
+      {
+        "result": "v1/example.cpp:11:22"
+      }
+    ],
+    "file": "v1/example.cpp",
+    "function": "main",
+    "language": "C++",
+    "name": "x",
+    "namespace": [],
+    "type": "int",
+    "use": [
+      "v1/example.cpp:3:13",
+      "v1/example.cpp:4:17",
+      "v1/example.cpp:11:22"
+    ]
+  },
+  "y-10-9-55a5e21a09759d0bd51d8553013046ad693ef550": {
+    "aliases": [],
+    "calls": [
+      {
+        "definitionPosition": "v1/example.cpp:3:1",
+        "functionName": "sum",
+        "invoke": "v1/example.cpp:11:18",
+        "parameter": "2"
+      }
+    ],
+    "class": "",
+    "decl": "v1/example.cpp:10:9",
+    "definition": [
+      "v1/example.cpp:10:9"
+    ],
+    "dependence": [
+      {
+        "result": "v1/example.cpp:11:25"
+      }
+    ],
+    "file": "v1/example.cpp",
+    "function": "main",
+    "language": "C++",
+    "name": "y",
+    "namespace": [],
+    "type": "int",
+    "use": [
+      "v1/example.cpp:3:20",
+      "v1/example.cpp:4:21",
+      "v1/example.cpp:11:25"
+    ]
+  }
+}

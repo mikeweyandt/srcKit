@@ -1,0 +1,10 @@
+{
+  // Opens the locally built srcKit image (compose service `srckit`) with the
+  // repo mounted at /work. The image has no git; use git on the host.
+  "name": "srcKit",
+  "dockerComposeFile": ["../compose.yaml", "compose.devcontainer.yaml"],
+  "service": "srckit",
+  "workspaceFolder": "/work",
+  "remoteUser": "ubuntu",
+  "shutdownAction": "stopCompose"
+}

@@ -1,0 +1,4 @@
+# Keeps the srckit container running so the devcontainer can attach to it.
+services:
+  srckit:
+    command: ["sleep", "infinity"]

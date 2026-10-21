@@ -1,0 +1,102 @@
+srcSAX: create the parser input with xmlNewIOInputStream()
+
+srcsax_controller.cpp carries a private copy of libxml2's internal
+`struct _xmlBuf` (2.9-2.13 layout) and pokes the input buffer through it.
+libxml2 2.14 changed that struct (Ubuntu 26.04 ships 2.15), so the copy
+reads past the end of the real struct and writes into unrelated fields.
+Use the public xmlNewIOInputStream() instead, as srcML's own copy of this
+file already does (srcML/src/libsrcml/srcsax_controller.cpp).
+
+Applied to: srcSlice srcDispatch/srcSAX, srcDiff src/srcSAX.
+
+diff --git a/src/srcsax/srcsax_controller.cpp b/src/srcsax/srcsax_controller.cpp
+index 302a7be..d9721de 100644
+--- a/src/srcsax/srcsax_controller.cpp
++++ b/src/srcsax/srcsax_controller.cpp
+@@ -34,68 +34,6 @@ static void libxml_error(void * /*ctx*/, const char * /*msg*/, ...) {}
+ /* srcsax_create_parser_context forward declaration */
+ static xmlParserCtxtPtr srcsax_create_parser_context(xmlParserInputBufferPtr buffer_input);
+ 
+-#ifdef LIBXML2_NEW_BUFFER
+-struct _xmlBuf {
+-    xmlChar *content;           /* The buffer content UTF8 */
+-    unsigned int compat_use;    /* for binary compatibility */
+-    unsigned int compat_size;   /* for binary compatibility */
+-    xmlBufferAllocationScheme alloc; /* The realloc method */
+-    xmlChar *contentIO;         /* in IO mode we may have a different base */
+-    size_t use;                 /* The buffer size used */
+-    size_t size;                /* The buffer size */
+-    xmlBufferPtr buffer;        /* wrapper for an old buffer */
+-    int error;                  /* an error code if a failure occured */
+-};
+-
+-#define _CHECK_COMPAT(buf)                      \
+-    if (buf->size != (size_t) buf->compat_size) \
+-        if (buf->compat_size < INT_MAX)         \
+-            buf->size = buf->compat_size;       \
+-    if (buf->use != (size_t) buf->compat_use)   \
+-        if (buf->compat_use < INT_MAX)          \
+-            buf->use = buf->compat_use;
+-
+-/**
+- * xmlBufResetInput
+- * @param buf XML buffer
+- * @param input XML parser input
+- *
+- * Function is taken from libxml2.
+- *
+- * @returns 0 on success and -1 on error.
+- */
+-static int
+-_xmlBufResetInput(xmlBuf * buf, xmlParserInputPtr input) {
+-    if ((input == NULL) || (buf == NULL) || (buf->error))
+-        return(-1);
+-    _CHECK_COMPAT(buf)
+-        input->base = input->cur = buf->content;
+-    input->end = &buf->content[buf->use];
+-    return(0);
+-
+-}
+-#else
+-/**
+- * xmlBufResetInput
+- * @param buf XML buffer
+- * @param input XML parser input
+- *
+- * Function is taken fro libxml2.
+- *
+- * @returns 0 on success and -1 on error.
+- */
+-static int
+-_xmlBufResetInput(xmlBuffer * buf, xmlParserInputPtr input) {
+-    if ((input == NULL) || (buf == NULL))
+-        return -1;
+-    input->base = input->buf->buffer->content;
+-    input->cur = input->buf->buffer->content;
+-    input->end = &input->buf->buffer->content[input->buf->buffer->use];
+-    return 0;
+-}
+-
+-#endif
+-
+ /**
+  * srcsax_controller_init
+  *
+@@ -412,16 +350,12 @@ srcsax_create_parser_context(xmlParserInputBufferPtr buffer_input) {
+         return(NULL);
+     }
+ 
+-    input = xmlNewInputStream(ctxt);
++    input = xmlNewIOInputStream(ctxt, buf, XML_CHAR_ENCODING_NONE);
+     if (input == NULL) {
+         xmlFreeParserCtxt(ctxt);
+         return(NULL);
+     }
+ 
+-    input->filename = NULL;
+-    input->buf = buf;
+-    _xmlBufResetInput(input->buf->buffer, input);
+-
+     inputPush(ctxt, input);
+ 
+     return(ctxt);

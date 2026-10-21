@@ -1,0 +1,33 @@
+# Local testing with the srcKit image. The repo is mounted at /work.
+#
+#   docker compose build                               # build srckit:local from this repo
+#   docker compose run --rm srckit tests/run.sh        # smoke test (--update to regenerate)
+#   docker compose run --rm srckit srcml foo.cpp       # run any tool
+#   docker compose run --rm srckit                     # interactive shell
+#
+# The published image instead (SRCKIT_IMAGE overrides the name):
+#
+#   docker compose run --rm srckit-hub srcml --version
+#
+# Containers run as uid/gid 1000 so files written to /work belong to you;
+# set SRCKIT_UID / SRCKIT_GID if your ids differ.
+
+x-srckit: &srckit
+  volumes:
+    - ./:/work:z
+  working_dir: /work
+  user: "${SRCKIT_UID:-1000}:${SRCKIT_GID:-1000}"
+
+services:
+  srckit:
+    <<: *srckit
+    image: srckit:local
+    build:
+      context: .
+      target: runtime
+    pull_policy: never
+
+  srckit-hub:
+    <<: *srckit
+    image: ${SRCKIT_IMAGE:-mikeweyandt/srckit:latest}
+    profiles: [hub]
